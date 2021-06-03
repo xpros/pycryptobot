@@ -1,6 +1,6 @@
 """Technical analysis on a trading Pandas DataFrame"""
 
-from math import floor
+from numpy import floor
 from re import compile
 
 from numpy import maximum, mean, minimum, nan, ndarray, round
@@ -8,7 +8,7 @@ from numpy import sum as np_sum
 from numpy import where
 from pandas import DataFrame, Series
 from statsmodels.tsa.statespace.sarimax import SARIMAX
-
+from models.helper.LogHelper import Logger
 
 class TechnicalAnalysis():
     def __init__(self, data=DataFrame()) -> None:
@@ -49,6 +49,7 @@ class TechnicalAnalysis():
         self.addSMA(20)
         self.addSMA(50)
         self.addSMA(200)
+        self.addEMA(8)
         self.addEMA(12)
         self.addEMA(26)
         self.addGoldenCross()
@@ -559,11 +560,11 @@ class TechnicalAnalysis():
             if len(df) > 0:
                 df_last = df.tail(1)
                 if float(df_last[0]) < price:
-                    print (' Support level of ' + str(df_last[0]) + ' formed at ' + str(df_last.index[0]), "\n")
+                    Logger.info(' Support level of ' + str(df_last[0]) + ' formed at ' + str(df_last.index[0]))
                 elif float(df_last[0]) > price:
-                    print (' Resistance level of ' + str(df_last[0]) + ' formed at ' + str(df_last.index[0]), "\n")
+                    Logger.info(' Resistance level of ' + str(df_last[0]) + ' formed at ' + str(df_last.index[0]))
                 else:
-                    print (' Support/Resistance level of ' + str(df_last[0]) + ' formed at ' + str(df_last.index[0]), "\n")
+                    Logger.info(' Support/Resistance level of ' + str(df_last[0]) + ' formed at ' + str(df_last.index[0]))
 
     def getResistance(self, price: float=0) -> float:
         if isinstance(price, int) or isinstance(price, float):
@@ -651,9 +652,26 @@ class TechnicalAnalysis():
             raise AttributeError(
                 "Pandas DataFrame 'close' column not int64 or float64.")
 
-        if not 'ema12' or not 'ema26' in self.df.columns:
+        if not 'ema8' in self.df.columns:
+            self.addEMA(8)
+
+        if not 'ema12' in self.df.columns:
             self.addEMA(12)
+        
+        if not 'ema26' in self.df.columns:
             self.addEMA(26)
+
+        # true if EMA8 is above the EMA12
+        self.df['ema8gtema12'] = self.df.ema8 > self.df.ema12
+        # true if the current frame is where EMA8 crosses over above
+        self.df['ema8gtema12co'] = self.df.ema8gtema12.ne(self.df.ema8gtema12.shift())
+        self.df.loc[self.df['ema8gtema12'] == False, 'ema8gtema12co'] = False
+
+        # true if the EMA8 is below the EMA12
+        self.df['ema8ltema12'] = self.df.ema8 < self.df.ema12
+        # true if the current frame is where EMA8 crosses over below
+        self.df['ema8ltema12co'] = self.df.ema8ltema12.ne(self.df.ema8ltema12.shift())
+        self.df.loc[self.df['ema8ltema12'] == False, 'ema8ltema12co'] = False
 
         # true if EMA12 is above the EMA26
         self.df['ema12gtema26'] = self.df.ema12 > self.df.ema26
@@ -809,7 +827,7 @@ class TechnicalAnalysis():
         try:
             self.df.to_csv(filename)
         except OSError:
-            print('Unable to save: ', filename)
+            Logger.critical('Unable to save: ', filename)
 
     def __calculateSupportResistenceLevels(self):
         """Support and Resistance levels. (private function)"""

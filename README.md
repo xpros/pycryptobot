@@ -1,6 +1,6 @@
 [![Docker](https://github.com/whittlem/pycryptobot/actions/workflows/container.yml/badge.svg)](https://github.com/whittlem/pycryptobot/actions/workflows/container.yml/badge.svg) [![Tests](https://github.com/whittlem/pycryptobot/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/whittlem/pycryptobot/actions/workflows/unit-tests.yml/badge.svg)
 
-# Python Crypto Bot v2.1.0 (pycryptobot)
+# Python Crypto Bot v2.23.3 (pycryptobot)
 
 ## Join our chat on Telegram
 
@@ -228,6 +228,7 @@ Sell signal:
 
 Special sell cases:
 
+* "buymaxsize" specify a fixed max amount of the quote currency to buy with
 * If "sellatloss" is on, bot will sell if price drops below the lower Fibonacci band
 * If "sellatloss" is on and "selllowerpcnt" is specified the bot will sell at the specified amount E.g. -2 for -2% margin
 * If "sellatloss" is on and "trailingstoploss" is specified the bot will sell at the specified amount below the buy high
@@ -238,20 +239,24 @@ Special sell cases:
 
 ## Optional Options
 
+    --autorestart                       Automatically restart the bot on error
     --sellatresistance                  Sells if the price reaches either resistance or Fibonacci band
 
 ## Disabling Default Functionality
 
     --disablebullonly                   Disable only buying in bull market
     --disablebuynearhigh                Disable buying within 3% of the dataframe high
+    --disablebuymacd                    Disable macd buy signal
     --disablebuyobv                     Disable obv buy signal
     --disablebuyelderray                Disable elder ray buy signal
-    --disablecryptorecession            Disable crypto recession check
     --disablefailsafefibonaccilow       Disable failsafe sell on fibonacci lower band
     --disablefailsafelowerpcnt          Disable failsafe sell on 'selllowerpcnt'
     --disableprofitbankupperpcnt        Disable profit bank on 'sellupperpcnt'
     --disableprofitbankfibonaccihigh    Disable profit bank on fibonacci upper band
     --disableprofitbankreversal         Disable profit bank on strong candlestick reversal
+    --disabletelegram                   Disable sending telegram messages
+    --disablelog                        Disable writing log entries
+    --disabletracker                    Disable saving CSV on buy and sell events
 
 ## "Sell At Loss" explained
 
@@ -260,6 +265,14 @@ The "sellatloss" option disabled has it's advantages and disadvantages. It does 
 ## Live Trading
 
 In order to trade live you need to authenticate with the Coinbase Pro or Binance APIs. This is all documented in my Medium articles. In summary you will need to include a config.json file in your project root which contains your API keys. If the file does not exist it will only work in test/demo mode.
+
+## Trading Simulation
+
+    --sim ['fast, fast-sample, slow-sample']   Sets simulation mode
+    --simstartdate                             Start date for sample simulation e.g '2021-01-15'
+    --simenddate                               End date for sample simulation or 'now'
+
+`simstartdate` takes priority over `simenddate` if both are given
 
 ## config.json examples
 
@@ -371,6 +384,27 @@ For telegram, add a piece to the config.json as follows:
     }
 
 You can use @botfather and @myidbot in telegram to create a bot with token and get a client id.
+
+For configuring logger, add a piece to the config.json as follows:
+*This is also default configuration of the logger, if no config is given and log is not disabled this configuration will apply.*
+
+    "logger" : {
+        "filelog": 1,
+        "logfile": "pycryptobot.log",
+        "fileloglevel": "DEBUG",
+        "consolelog": 1,
+        "consoleloglevel": "INFO"
+    }
+
+"filelog" and "consolelog" can only get 1 (enable) or 0 (disable).
+"--disablelog" argument or "disablelog" config will disable to writing logfile as backwards compatibility.
+If you want to disable logging entirely, you can set "filelog" and "consolelog" to 0.
+
+"logfile" is overriden by '--logfile' console argument.
+If '--logfile' used when running bot "logfile": "pycryptobot.log" line in config file will be ignored.
+
+"fileloglevel" and "consoleloglevel" can get one of 'CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG', 'NOTSET'
+For further detail in log levels: https://docs.python.org/3/library/logging.html#logging-levels
 
 ## Multi-Market Trading
 

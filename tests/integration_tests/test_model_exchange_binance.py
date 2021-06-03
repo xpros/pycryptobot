@@ -1,12 +1,14 @@
 import json, pandas, pytest, os, sys, urllib3
 from datetime import datetime
-
 # disable insecure ssl warning
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 sys.path.append('.')
 # pylint: disable=import-error
 from models.exchange.binance import AuthAPI, PublicAPI
+from models.helper.LogHelper import Logger
+Logger.configure()
+
 
 # there is no dynamic way of retrieving a valid order market
 VALID_ORDER_MARKET = 'DOGEUSDT'
@@ -299,9 +301,11 @@ def test_getOrders():
     assert len(df) > 0
 
     actual = df.columns.to_list()
-    expected = [ 'created_at', 'market', 'action', 'type', 'size', 'filled', 'status', 'price' ]
+    expected = ['created_at', 'market', 'action', 'type', 'size', 'filled', 'status', 'price']
+    #  order is not important, but no duplicate
     assert len(actual) == len(expected)
-    assert all([a == b for a, b in zip(actual, expected)])
+    diff = set(actual) ^ set(expected)
+    assert not diff
 
 def test_getOrdersInvalidMarket():
     filename = 'config.json'
@@ -358,9 +362,11 @@ def test_getOrdersValidMarket():
     assert len(df) > 0
 
     actual = df.columns.to_list()
-    expected = [ 'created_at', 'market', 'action', 'type', 'size', 'filled', 'status', 'price' ]
+    expected = ['created_at', 'market', 'action', 'type', 'size', 'filled', 'status', 'price']
+    #  order is not important, but no duplicate
     assert len(actual) == len(expected)
-    assert all([a == b for a, b in zip(actual, expected)])
+    diff = set(actual) ^ set(expected)
+    assert not diff
 
 def test_getOrdersInvalidAction():
     filename = 'config.json'
@@ -417,9 +423,11 @@ def test_getOrdersValidActionBuy():
     assert len(df) >= 0
 
     actual = df.columns.to_list()
-    expected = [ 'created_at', 'market', 'action', 'type', 'size', 'filled', 'status', 'price' ]
+    expected = ['created_at', 'market', 'action', 'type', 'size', 'filled', 'status', 'price']
+    #  order is not important, but no duplicate
     assert len(actual) == len(expected)
-    assert all([a == b for a, b in zip(actual, expected)])
+    diff = set(actual) ^ set(expected)
+    assert not diff
 
 def test_getOrdersValidActionSell():
     filename = 'config.json'
@@ -449,9 +457,11 @@ def test_getOrdersValidActionSell():
     assert len(df) >= 0
 
     actual = df.columns.to_list()
-    expected = [ 'created_at', 'market', 'action', 'type', 'size', 'filled', 'status', 'price' ]
+    expected = ['created_at', 'market', 'action', 'type', 'size', 'filled', 'status', 'price']
+    #  order is not important, but no duplicate
     assert len(actual) == len(expected)
-    assert all([a == b for a, b in zip(actual, expected)])
+    diff = set(actual) ^ set(expected)
+    assert not diff
 
 def test_getOrdersInvalidStatus():
     filename = 'config.json'
@@ -509,9 +519,11 @@ def test_getOrdersValidStatusAll():
         pass
     else:
         actual = df.columns.to_list()
-        expected = [ 'created_at', 'market', 'action', 'type', 'size', 'filled', 'status', 'price' ]
+        expected = ['created_at', 'market', 'action', 'type', 'size', 'filled', 'status', 'price']
+        #  order is not important, but no duplicate
         assert len(actual) == len(expected)
-        assert all([a == b for a, b in zip(actual, expected)])
+        diff = set(actual) ^ set(expected)
+        assert not diff
 
 def test_getOrdersValidStatusOpen():
     filename = 'config.json'
@@ -542,9 +554,11 @@ def test_getOrdersValidStatusOpen():
         pass
     else:
         actual = df.columns.to_list()
-        expected = [ 'created_at', 'market', 'action', 'type', 'size', 'filled', 'status', 'price' ]
+        expected = ['created_at', 'market', 'action', 'type', 'size', 'filled', 'status', 'price']
+        #  order is not important, but no duplicate
         assert len(actual) == len(expected)
-        assert all([a == b for a, b in zip(actual, expected)])
+        diff = set(actual) ^ set(expected)
+        assert not diff
 
 def test_getOrdersValidStatusPending():
     filename = 'config.json'
@@ -575,9 +589,11 @@ def test_getOrdersValidStatusPending():
         pass
     else:
         actual = df.columns.to_list()
-        expected = [ 'created_at', 'market', 'action', 'type', 'size', 'filled', 'status', 'price' ]
+        expected = ['created_at', 'market', 'action', 'type', 'size', 'filled', 'status', 'price']
+        #  order is not important, but no duplicate
         assert len(actual) == len(expected)
-        assert all([a == b for a, b in zip(actual, expected)])
+        diff = set(actual) ^ set(expected)
+        assert not diff
 
 def test_getOrdersValidStatusDone():
     filename = 'config.json'
@@ -608,9 +624,11 @@ def test_getOrdersValidStatusDone():
         pass
     else:
         actual = df.columns.to_list()
-        expected = [ 'created_at', 'market', 'action', 'type', 'size', 'filled', 'status', 'price' ]
+        expected = ['created_at', 'market', 'action', 'type', 'size', 'filled', 'status', 'price']
+        #  order is not important, but no duplicate
         assert len(actual) == len(expected)
-        assert all([a == b for a, b in zip(actual, expected)])
+        diff = set(actual) ^ set(expected)
+        assert not diff
 
 def test_getOrdersValidStatusActive():
     filename = 'config.json'
@@ -641,9 +659,11 @@ def test_getOrdersValidStatusActive():
         pass
     else:
         actual = df.columns.to_list()
-        expected = [ 'created_at', 'market', 'action', 'type', 'size', 'filled', 'status', 'price' ]
+        expected = ['created_at', 'market', 'action', 'type', 'size', 'filled', 'status', 'price']
+        #  order is not important, but no duplicate
         assert len(actual) == len(expected)
-        assert all([a == b for a, b in zip(actual, expected)])
+        diff = set(actual) ^ set(expected)
+        assert not diff
 
 def test_getTime():
     filename = 'config.json'
