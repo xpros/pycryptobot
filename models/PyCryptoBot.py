@@ -2,6 +2,7 @@ import pandas as pd
 import argparse
 import json
 import math
+import os
 import random
 import re
 import sys
@@ -53,11 +54,16 @@ def parse_arguments():
     # optional options
     parser.add_argument('--sellatresistance', action="store_true", help="sell at resistance or upper fibonacci band")
     parser.add_argument('--autorestart', action="store_true", help="Auto restart the bot in case of exception")
+    parser.add_argument('--stats', action="store_true", help="display summary of completed trades")
+    parser.add_argument('--statgroup', nargs='+', help="add multiple currency pairs to merge stats")
+    parser.add_argument('--statstartdate', type=str, help="trades before this date are ignored in stats function e.g 2021-01-15")
+    parser.add_argument('--statdetail', action="store_true", help="display detail of completed transactions for a given market")
 
     # disable defaults
     parser.add_argument('--disablebullonly', action="store_true", help="disable only buying in bull market")
     parser.add_argument('--disablebuynearhigh', action="store_true", help="disable buy within 5 percent of high")
     parser.add_argument('--disablebuymacd', action="store_true", help="disable macd buy signal")
+    parser.add_argument('--disablebuyema', action="store_true", help="disable ema buy signal")
     parser.add_argument('--disablebuyobv', action="store_true", help="disable obv buy signal")
     parser.add_argument('--disablebuyelderray', action="store_true", help="disable elder ray buy signal")
     parser.add_argument('--disablefailsafefibonaccilow', action="store_true", help="disable failsafe sell on fibonacci lower band")
@@ -95,15 +101,15 @@ def truncate(f: Union[int, float], n: Union[int, float]) -> str:
     if not isinstance(n, int) and not isinstance(n, float):
         return '0.0'
 
-    if (f < 0.001) and n >= 4:
-        return f'{f:.4f}'
+    if (f < 0.0001) and n >= 5:
+        return f'{f:.5f}'
 
     # `{n}` inside the actual format honors the precision
     return f'{math.floor(f * 10 ** n) / 10 ** n:.{n}f}'
 
 
 class PyCryptoBot():
-    def __init__(self, exchange='coinbasepro', filename='config.json'):
+    def __init__(self, exchange='', filename='config.json'):
         args = parse_arguments()
 
         self.api_key = ''
@@ -119,7 +125,20 @@ class PyCryptoBot():
             else:
                 self.exchange = args['exchange']
         else:
-            self.exchange = exchange
+            try:
+                with open(filename) as config_file:
+                    config = json.load(config_file)
+                    if exchange == '' and ('coinbasepro' in config or 'api_pass' in config):
+                        self.exchange = 'coinbasepro'
+                    elif exchange == '' and 'binance' in config:
+                        self.exchange = 'binance'
+                    elif exchange != '' and exchange in ['coinbasepro', 'binance', 'dummy']:
+                        self.exchange = exchange
+                    else:
+                        self.exchange = 'dummy'
+            except:
+                self.exchange = 'dummy'
+                pass
 
         self.market = 'BTC-GBP'
         self.base_currency = 'BTC'
@@ -148,10 +167,15 @@ class PyCryptoBot():
 
         self.sellatresistance = False
         self.autorestart = False
+        self.stats = False
+        self.statgroup = None
+        self.statstartdate = None
+        self.statdetail = False
 
         self.disablebullonly = False
         self.disablebuynearhigh = False
         self.disablebuymacd = False
+        self.disablebuyema= False
         self.disablebuyobv = False
         self.disablebuyelderray = False
         self.disablefailsafefibonaccilow = False
@@ -168,11 +192,14 @@ class PyCryptoBot():
         self.consolelog = True
         self.consoleloglevel = 'INFO'
 
+        self.ema1226_15m_cache = None
         self.ema1226_1h_cache = None
         self.ema1226_6h_cache = None
         self.sma50200_1h_cache = None
 
-        if args['init']:
+        self.sim_smartswitch = False
+
+        if args['init'] or (filename == 'config.json' and not os.path.isfile(filename)):
             # config builder
             cb = ConfigBuilder()
             cb.init()
@@ -182,8 +209,9 @@ class PyCryptoBot():
             with open(filename) as config_file:
                 config = json.load(config_file)
 
-                if exchange not in config and 'binance' in config:
-                    self.exchange = 'binance'
+                # if no exchange specified then dummy
+                #if self.exchange not in config:
+                #    self.exchange = 'dummy'
 
                 if self.exchange == 'coinbasepro' and 'coinbasepro' in config:
                     coinbaseProConfigParser(self, config['coinbasepro'], args)
@@ -290,6 +318,17 @@ class PyCryptoBot():
         except Exception:
             return 'v0.0.0'
 
+    def getInterval(self, df: pd.DataFrame=pd.DataFrame(), iterations: int=0) -> pd.DataFrame:
+        if len(df) == 0:
+            return df
+
+        if self.isSimulation() and iterations > 0:
+            # with a simulation iterate through data
+            return df.iloc[iterations - 1:iterations]
+        else:
+            # most recent entry
+            return df.tail(1)
+
     def printGranularity(self) -> str:
         if self.exchange == 'binance':
             return to_binance_granularity(self.granularity)
@@ -317,6 +356,13 @@ class PyCryptoBot():
         except Exception:
             return None
 
+    def getDateFromISO8601Str(self, date: str) :
+        new_date_str = f'{date} 00:00:00' if len(date) == 10 else date
+        dt = new_date_str.split('T')
+        date = dt[0].split('-')
+        time = dt[1].split(':')
+        return datetime(int(date[0]), int(date[1]), int(date[2]), int(time[0]), int(time[1]), int(time[2])) 
+
     def getHistoricalData(self, market, granularity: int, iso8601start='', iso8601end=''):
         if self.exchange == 'coinbasepro':
             api = CBPublicAPI()
@@ -332,19 +378,76 @@ class PyCryptoBot():
             api = BPublicAPI()
 
             if iso8601start != '' and iso8601end != '':
-                return api.getHistoricalData(
-                    market,
-                    to_binance_granularity(granularity),
-                    str(datetime.strptime(iso8601start, '%Y-%m-%dT%H:%M:%S.%f').strftime('%d %b, %Y')),
-                    str(datetime.strptime(iso8601end, '%Y-%m-%dT%H:%M:%S.%f').strftime('%d %b, %Y'))
-                )
+                return api.getHistoricalData(market, to_binance_granularity(granularity), iso8601start, iso8601end)
             else:
                 return api.getHistoricalData(market, to_binance_granularity(granularity))
         else:
             return pd.DataFrame()
 
+
+    def getSmartSwitchDataFrame(self, df: pd.DataFrame, market, granularity: int, simstart: str="", simend: str="", simcurrent: str="") -> pd.DataFrame:
+        Logger.info(" *** getting smartswitch (" + str(granularity) + ") market data *** ")
+        
+        if self.isSimulation():
+            result_df_cache = df
+
+            simstart = self.getDateFromISO8601Str(simstart)
+            simend = self.getDateFromISO8601Str(simend)
+            
+            try:
+                df_first = None
+                df_last = None
+                
+                Logger.debug("Row Count (" + str(granularity) + "): " + str(df.shape[0]))
+                df_first = self.getDateFromISO8601Str(str(df.head(1).index.format()[0]))
+                df_last = self.getDateFromISO8601Str(str(df.tail(1).index.format()[0]))
+            except Exception:
+                result_df_cache = pd.DataFrame()
+           
+            if (df_first is None and df_last is None) or (df_first.isoformat(timespec='milliseconds') > simstart.isoformat(timespec='milliseconds')):
+                df1 = self.getHistoricalData(market, granularity)
+                result_df_cache = df1
+                
+                df_first = self.getDateFromISO8601Str(datetime.strptime(str(simstart), "%Y-%m-%d %H:%M:%S").isoformat())
+                df_last = self.getDateFromISO8601Str(datetime.strptime(str(simend), "%Y-%m-%d %H:%M:%S").isoformat())
+                end_date = self.getDateFromISO8601Str(datetime.strptime(str(simend), "%Y-%m-%d %H:%M:%S").isoformat())
+                
+                if df_first.isoformat(timespec='milliseconds') > simstart.isoformat(timespec='milliseconds'):
+                    df1 = self.getHistoricalData(market, granularity, datetime.strptime(str(df_first), "%Y-%m-%d %H:%M:%S").isoformat(), datetime.strptime(str(end_date), "%Y-%m-%d %H:%M:%S").isoformat())
+
+                    while df_first.isoformat(timespec='milliseconds') > simstart.isoformat(timespec='milliseconds'):
+                        end_date = df_first
+                        df_first -= timedelta(minutes=(300*(granularity/60)))
+                        
+                        if df_first.isoformat(timespec='milliseconds') < simstart.isoformat(timespec='milliseconds'):
+                                df_first = simstart
+
+                        df2 = self.getHistoricalData(market, granularity, str(df_first), str(end_date))
+
+                        result_df_cache = pd.concat([df2.copy(), df1.copy()]).drop_duplicates()
+                        df1 = result_df_cache
+            if 'morning_star' not in result_df_cache:
+                result_df_cache.sort_values(by=['date'], ascending=True, inplace=True)
+                trading_dataCopy = result_df_cache.copy()
+                technical_analysis = TechnicalAnalysis(trading_dataCopy)
+                technical_analysis.addAll()
+                result_df_cache = technical_analysis.getDataFrame()
+
+            return result_df_cache
+
+    def getSmartSwitchHistoricalDataChained(self, market, granularity: int, start: str="", end: str="", simdate: str="") -> pd.DataFrame:
+        if self.isSimulation():
+            self.ema1226_15m_cache = self.getSmartSwitchDataFrame(self.ema1226_15m_cache, market, 900, start, end, simdate)
+            self.ema1226_1h_cache = self.getSmartSwitchDataFrame(self.ema1226_1h_cache, market, 3600, start, end, simdate)
+            self.ema1226_6h_cache = self.getSmartSwitchDataFrame(self.ema1226_6h_cache, market, 21600, start, end, simdate)                
+            
+            if granularity == 900:
+                return self.ema1226_15m_cache[(self.ema1226_15m_cache['date'] >= str(simdate))]
+            else:
+                return self.ema1226_1h_cache[(self.ema1226_1h_cache['date'] >= str(simdate))]
+
     def getHistoricalDataChained(self, market, granularity: int, max_interations: int=1) -> pd.DataFrame:
-        df1 = self.getHistoricalData(market, self.getGranularity())
+        df1 = self.getHistoricalData(market, granularity)
 
         if max_interations == 1:
             return df1
@@ -371,10 +474,48 @@ class PyCryptoBot():
     def getSmartSwitch(self):
         return self.smart_switch
 
-    def is1hEMA1226Bull(self):
+    def is15mEMA1226Bull(self, iso8601end: str=''):
+        try:
+            if self.isSimulation() and isinstance(self.ema1226_15m_cache, pd.DataFrame):
+                df_data = self.ema1226_15m_cache.loc[self.ema1226_15m_cache['date'] <= iso8601end].copy()
+            elif self.exchange == 'coinbasepro':
+                api = CBPublicAPI()
+                df_data = api.getHistoricalData(self.market, 900)
+                self.ema1226_15m_cache = df_data
+            elif self.exchange == 'binance':
+                api = BPublicAPI()
+                df_data = api.getHistoricalData(self.market, '15m')
+                self.ema1226_15m_cache = df_data
+            else:
+                return False
+
+            ta = TechnicalAnalysis(df_data)
+
+            if 'ema12' not in df_data:
+                ta.addEMA(12)
+
+            if 'ema26' not in df_data:
+                ta.addEMA(26)
+
+            df_last = ta.getDataFrame().copy().iloc[-1,:]
+
+            Logger.debug("---- EMA1226 15m Check----")
+            if self.isSimulation():
+                Logger.debug("simdate: " + str(df_last['date']))
+                Logger.debug("ema12 15m: " + str(df_last['ema12']))
+                Logger.debug("ema26 15m: " + str(df_last['ema26']))
+                
+            Logger.debug("bull 15m: " + str(df_last['ema12'] > df_last['ema26']))
+
+            df_last['bull'] = df_last['ema12'] > df_last['ema26']  
+            return bool(df_last['bull'])
+        except Exception:
+            return False
+
+    def is1hEMA1226Bull(self, iso8601end: str=''):
         try:
             if self.isSimulation() and isinstance(self.ema1226_1h_cache, pd.DataFrame):
-                df_data = self.ema1226_1h_cache
+                df_data = self.ema1226_1h_cache.loc[self.ema1226_1h_cache['date'] <= iso8601end].copy()
             elif self.exchange == 'coinbasepro':
                 api = CBPublicAPI()
                 df_data = api.getHistoricalData(self.market, 3600)
@@ -393,18 +534,27 @@ class PyCryptoBot():
 
             if 'ema26' not in df_data:
                 ta.addEMA(26)
-            
+
             df_last = ta.getDataFrame().copy().iloc[-1,:]
-            df_last['bull'] = df_last['ema12'] > df_last['ema26']
+
+            Logger.debug("---- EMA1226 1H Check----")
+            if self.isSimulation():
+                Logger.debug("simdate: " + str(df_last['date']))
+                Logger.debug("ema12 1h: " + str(df_last['ema12']))
+                Logger.debug("ema26 1h: " + str(df_last['ema26']))
+                
+            Logger.debug("bull 1h: " + str(df_last['ema12'] > df_last['ema26']))
+
+            df_last['bull'] = df_last['ema12'] > df_last['ema26']  
             return bool(df_last['bull'])
         except Exception:
             return False
 
-    def is1hSMA50200Bull(self):
+    def is1hSMA50200Bull(self, iso8601end: str=''):
         try:
             if self.isSimulation() and isinstance(self.sma50200_1h_cache, pd.DataFrame):
-                df_data = self.sma50200_1h_cache
-            if self.exchange == 'coinbasepro':
+                df_data = self.sma50200_1h_cache.loc[self.sma50200_1h_cache['date'] <= iso8601end]
+            elif self.exchange == 'coinbasepro':
                 api = CBPublicAPI()
                 df_data = api.getHistoricalData(self.market, 3600)
                 self.sma50200_1h_cache = df_data
@@ -424,6 +574,15 @@ class PyCryptoBot():
                 ta.addSMA(200)
 
             df_last = ta.getDataFrame().copy().iloc[-1,:]
+
+            Logger.debug("---- SMA50200 1H Check----")
+            if self.isSimulation():
+                Logger.debug("simdate: " + str(df_last['date']))
+                Logger.debug("sma50 1h: " + str(df_last['sma50']))
+                Logger.debug("sma200 1h: " + str(df_last['sma200']))
+                
+            Logger.debug("bull 1h: " + str(df_last['sma50'] > df_last['sma200']))
+
             df_last['bull'] = df_last['sma50'] > df_last['sma200']
             return bool(df_last['bull'])
         except Exception:
@@ -453,18 +612,18 @@ class PyCryptoBot():
         except Exception:
             return False
 
-    def is6hEMA1226Bull(self):
+    def is6hEMA1226Bull(self, iso8601end: str=''):
         try:
-            if isinstance(self.ema1226_6h_cache, pd.DataFrame):
-                df_data = self.ema1226_6h_cache
+            if self.isSimulation() and isinstance(self.ema1226_6h_cache, pd.DataFrame):
+                df_data = self.ema1226_6h_cache[(self.ema1226_6h_cache['date'] <= iso8601end)]
             elif self.exchange == 'coinbasepro':
                 api = CBPublicAPI()
                 df_data = api.getHistoricalData(self.market, 21600)
                 self.ema1226_6h_cache = df_data
             elif self.exchange == 'binance':
                 api = BPublicAPI()
-                df_data = api.getHistoricalData
-                self.ema1226_6h_cache = df_data(self.market, '6h')
+                df_data = api.getHistoricalData(self.market, '6h')
+                self.ema1226_6h_cache = df_data
             else:
                 return False
 
@@ -478,6 +637,15 @@ class PyCryptoBot():
 
             df_last = ta.getDataFrame().copy().iloc[-1, :]
             df_last['bull'] = df_last['ema12'] > df_last['ema26']
+
+            Logger.debug("---- EMA1226 6H Check----")
+            if self.isSimulation():
+                Logger.debug("simdate: " + str(df_last['date']))
+                Logger.debug("ema12 6h: " + str(df_last['ema12']))
+                Logger.debug("ema26 6h: " + str(df_last['ema26']))
+                
+            Logger.debug("bull 6h: " + str(df_last['ema12'] > df_last['ema26']))
+                
             return bool(df_last['bull'])
         except Exception:
             return False
@@ -558,6 +726,9 @@ class PyCryptoBot():
 
     def autoRestart(self) -> bool:
         return self.autorestart
+    
+    def getStats(self) -> bool:
+        return self.stats
 
     def getLastAction(self):
         return self.last_action
@@ -570,6 +741,9 @@ class PyCryptoBot():
 
     def disableBuyMACD(self) -> bool:
         return self.disablebuymacd
+
+    def disableBuyEMA(self) -> bool:
+        return self.disablebuyema
 
     def disableBuyOBV(self) -> bool:
         return self.disablebuyobv
@@ -760,7 +934,7 @@ class PyCryptoBot():
                 txt = '             Bot Mode : TEST - test trades using dummy funds :)'
 
             Logger.info('|  ' + txt + (' ' * (75 - len(txt))) + ' | ')
-
+                
             txt = '          Bot Started : ' + str(datetime.now())
             Logger.info('|  ' + txt + (' ' * (75 - len(txt))) + ' | ')
             Logger.info('================================================================================')
@@ -791,6 +965,10 @@ class PyCryptoBot():
 
             txt = '         Use Buy MACD : ' + str(not self.disableBuyMACD()) + '  --disablebuymacd'
             Logger.info('|  ' + txt + (' ' * (75 - len(txt))) + ' | ')
+
+            txt = '         Use Buy EMA : ' + str(not self.disableBuyEMA()) + '  --disablebuyema'
+            Logger.info('|  ' + txt + (' ' * (75 - len(txt))) + ' | ')
+
 
             txt = '          Use Buy OBV : ' + str(not self.disableBuyOBV()) + '  --disablebuyobv'
             Logger.info('|  ' + txt + (' ' * (75 - len(txt))) + ' | ')
@@ -832,6 +1010,9 @@ class PyCryptoBot():
                 txt = '         Max Buy Size : ' + str(self.getBuyMaxSize()) + '  --buymaxsize <size>'
                 Logger.info('|  ' + txt + (' ' * (75 - len(txt))) + ' | ')
 
+            if self.disablebuyema and self.disablebuymacd :
+                Logger.info('| WARNING : EMA and MACD indicators disabled, no buy events will happen        |')
+
             Logger.info('================================================================================')
 
         # run the first job immediately after starting
@@ -841,15 +1022,29 @@ class PyCryptoBot():
 
                 attempts = 0
 
-                if self.simstartdate is not None:
+                if self.simstartdate is not None and self.simenddate is not None:
+                    date = self.simstartdate.split('-')
+                    startDate = datetime(int(date[0]), int(date[1]), int(date[2]))
+                    if self.simenddate == 'now':
+                        endDate = datetime.now()
+                    else:
+                        date = self.simenddate.split('-')
+                        endDate = datetime(int(date[0]), int(date[1]), int(date[2]))
+                    while len(tradingData) != 300 and attempts < 10:
+                        tradingData = self.getHistoricalData(self.getMarket(), self.getGranularity(),
+                                                             startDate.isoformat(timespec='milliseconds'),
+                                                             endDate.isoformat(timespec='milliseconds'))
+                        attempts += 1
+                elif self.simstartdate is not None and self.simenddate is None:
                     date = self.simstartdate.split('-')
                     startDate = datetime(int(date[0]), int(date[1]), int(date[2]))
                     endDate = startDate + timedelta(minutes=(self.getGranularity()/60)*300)
                     while len(tradingData) != 300 and attempts < 10:
                         tradingData = self.getHistoricalData(self.getMarket(), self.getGranularity(),
-                                                             startDate.isoformat(timespec='milliseconds'))
+                                                             startDate.isoformat(timespec='milliseconds'),
+                                                             endDate.isoformat(timespec='milliseconds'))
                         attempts += 1
-                elif self.simenddate is not None:
+                elif self.simenddate is not None and self.simstartdate is None:
                     if self.simenddate == 'now':
                         endDate = datetime.now()
                     else:
@@ -858,7 +1053,8 @@ class PyCryptoBot():
                     startDate = endDate - timedelta(minutes=(self.getGranularity()/60)*300)
                     while len(tradingData) != 300 and attempts < 10:
                         tradingData = self.getHistoricalData(self.getMarket(), self.getGranularity(),
-                                                             startDate.isoformat(timespec='milliseconds'))
+                                                             startDate.isoformat(timespec='milliseconds'),
+                                                             endDate.isoformat(timespec='milliseconds'))
                         attempts += 1
                 else:
                     while len(tradingData) != 300 and attempts < 10:
@@ -879,7 +1075,7 @@ class PyCryptoBot():
                     Logger.info(' | ' + txt + (' ' * (75 - len(txt))) + ' | ')
                     txt = '     Sampling end : ' + str(endDate)
                     Logger.info(' | ' + txt + (' ' * (75 - len(txt))) + ' | ')
-                    if self.simstartdate != None:
+                    if self.simstartdate != None and len(tradingData) < 300:
                         txt = '    WARNING: Using less than 300 intervals'
                         Logger.info(' | ' + txt + (' ' * (75 - len(txt))) + ' | ')
                         txt = '    Interval size : ' + str(len(tradingData))

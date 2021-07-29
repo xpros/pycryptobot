@@ -1,4 +1,7 @@
 import re
+import ast
+import json
+import os.path
 
 from .default_parser import isCurrencyValid, defaultConfigParse, merge_config_and_args
 
@@ -41,10 +44,46 @@ def parser(app, binance_config, args={}):
     #print('Binance Configuration parse')
 
     if not binance_config:
-        raise Exception('There is an error in your config dictionnary')
+        raise Exception('There is an error in your config dictionary')
 
     if not app:
         raise Exception('No app is passed')
+
+    if 'api_key' in binance_config or 'api_secret' in binance_config:
+        print('>>> migrating api keys to binance.key <<<', "\n")
+
+        # create 'binance.key'
+        fh = open('binance.key', 'w')
+        fh.write(binance_config['api_key'] + "\n" + binance_config['api_secret'])
+        fh.close()
+
+        if os.path.isfile('config.json') and os.path.isfile('binance.key'):
+            binance_config['api_key_file'] = binance_config.pop('api_key')
+            binance_config['api_key_file'] = 'binance.key'
+            del binance_config['api_secret']
+
+            # read 'binance' element from config.json
+            fh = open('config.json', 'r')
+            config_json = ast.literal_eval(fh.read())
+            config_json['binance'] = binance_config
+            fh.close()
+
+            # write new 'binance' element
+            fh = open('config.json', 'w')
+            fh.write(json.dumps(config_json, indent=4))
+            fh.close()
+        else:
+            print ('migration failed (io error)', "\n")
+
+    if 'api_key_file' in binance_config:
+        try :
+            with open( binance_config['api_key_file'], 'r') as f :
+                key = f.readline().strip()
+                secret = f.readline().strip()
+            binance_config['api_key'] = key
+            binance_config['api_secret'] = secret
+        except :
+            raise RuntimeError('Unable to read ' + binance_config['api_key_file'])
 
     if 'api_key' in binance_config and 'api_secret' in binance_config and 'api_url' in binance_config:
         # validates the api key is syntactically correct

@@ -1,6 +1,6 @@
 [![Docker](https://github.com/whittlem/pycryptobot/actions/workflows/container.yml/badge.svg)](https://github.com/whittlem/pycryptobot/actions/workflows/container.yml/badge.svg) [![Tests](https://github.com/whittlem/pycryptobot/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/whittlem/pycryptobot/actions/workflows/unit-tests.yml/badge.svg)
 
-# Python Crypto Bot v2.30.2 (pycryptobot)
+# Python Crypto Bot v2.47.2 (pycryptobot)
 
 ## Join our chat on Telegram
 
@@ -239,6 +239,7 @@ Special sell cases:
 
 ## Optional Options
 
+    --stats                             Display order profit and loss (P&L) report
     --autorestart                       Automatically restart the bot on error
     --sellatresistance                  Sells if the price reaches either resistance or Fibonacci band
 
@@ -247,6 +248,7 @@ Special sell cases:
     --disablebullonly                   Disable only buying in bull market
     --disablebuynearhigh                Disable buying within 3% of the dataframe high
     --disablebuymacd                    Disable macd buy signal
+	--disablebuyema                     Disable ema buy signal.If both core indicators ema and macd buy signals are disabled, bot won't buy.Doesn't affect sell strategy.
     --disablebuyobv                     Disable obv buy signal
     --disablebuyelderray                Disable elder ray buy signal
     --disablefailsafefibonaccilow       Disable failsafe sell on fibonacci lower band
@@ -274,15 +276,32 @@ In order to trade live you need to authenticate with the Coinbase Pro or Binance
 
 `simstartdate` takes priority over `simenddate` if both are given
 
+## API key / secret / password storage
+
+From now on it's recommended NOT to store the credentials in the config file because people share configs and may inadvertently share their API keys within.
+
+Instead, please, create `binance.key` or `coinbase.key` (or use your own names for the files) and refer to these files in the `config.json` file as:
+
+    "api_key_file" : "binance.key"
+
+Once you have done that, "api_key" and "api_secret" can be safely removed from your config file and you're free to share your configs without worrying of leaked credentials.
+
+### binance.key / conbase.key examples
+
+Actually it's pretty simple, these files are supposed to be a simple text files with the API key on the first line, API secret on the second line and in case of coinbase, probably the API password on the third. No comments or anything else is allowed, just the long string of numbers:
+
+    0234238792873423...82736827638472
+    68473847745876abscd9872...8237642
+
+(dots are used to indicate places where the strings were shortened)
+
 ## config.json examples
 
 Coinbase Pro basic (using smart switching)
 
     {
         "api_url" : "https://api.pro.coinbase.com",
-        "api_key" : "<removed>",
-        "api_secret" : "<removed>",
-        "api_pass" : "<removed>",
+        "api_key_file" : "coinbase.key"
         "config" : {
             "cryptoMarket" : "BTC",
             "fiatMarket" : "GBP",
@@ -295,9 +314,7 @@ Coinbase Pro basic (specific granularity, no smart switching)
 
     {
         "api_url" : "https://api.pro.coinbase.com",
-        "api_key" : "<removed>",
-        "api_secret" : "<removed>",
-        "api_pass" : "<removed>",
+        "api_key_file" : "coinbase.key"
         "config" : {
             "cryptoMarket" : "BCH",
             "fiatMarket" : "GBP",
@@ -312,9 +329,7 @@ Coinbase Pro only (new format)
     {
         "coinbasepro" : {
             "api_url" : "https://api.pro.coinbase.com",
-            "api_key" : "<removed>",
-            "api_secret" : "<removed>",
-            "api_passphrase" : "<removed>",
+            "api_key_file" : "coinbase.key"
             "config" : {
                 "base_currency" : "BTC",
                 "quote_currency" : "GBP",
@@ -330,8 +345,7 @@ Binance only (new format)
     {
         "binance" : {
             "api_url" : "https://api.binance.com",
-            "api_key" : "<removed>",
-            "api_secret" : "<removed>",
+            "api_key_file" : "binance.key"
             "config" : {
                 "base_currency" : "BTC",
                 "quote_currency" : "ZAR",
@@ -347,8 +361,7 @@ Coinbase Pro and Binance (new format)
     {
         "binance" : {
             "api_url" : "https://api.binance.com",
-            "api_key" : "<removed>",
-            "api_secret" : "<removed>",
+            "api_key_file" : "binance.key"
             "config" : {
                 "base_currency" : "BTC",
                 "quote_currency" : "ZAR",
@@ -359,9 +372,7 @@ Coinbase Pro and Binance (new format)
         },
         "coinbasepro" : {
             "api_url" : "https://api.pro.coinbase.com",
-            "api_key" : "<removed>",
-            "api_secret" : "<removed>",
-            "api_passphrase" : "<removed>",
+            "api_key_file" : "coinbase.key"
             "config" : {
                 "base_currency" : "BTC",
                 "quote_currency" : "GBP",
@@ -418,9 +429,7 @@ Assuming each bot has a config.json that looks similar to this (update the "cryp
 
     {
         "api_url" : "https://api.pro.coinbase.com",
-        "api_key" : "<removed>",
-        "api_secret" : "<removed>",
-        "api_pass" : "<removed>",
+        "api_key_file" : "coinbase.key"
         "config" : {
             "cryptoMarket" : "BTC",
             "fiatMarket" : "GBP",
@@ -453,6 +462,35 @@ Some of you may have been helping test the new code for a few months in the "bin
     python3 -m pip install -r requirements.txt
 
 Please note you need to be using Python 3.9.x or greater. The previous bot version only required Python 3.x.
+
+## Stats Module
+
+To keep track of the bots performance over time you can run the stats module. e.g.
+
+    python3 pycryptobot.py --stats
+
+This will analyse all the completed buy/sell trade pairs to give stats on todays trades, the trades over the last 7 days, the trades over the last 30 days, and all-time trades.
+
+An optional flag of --statstartdate can be given to ignore all trades that happened before a specified date. The date must be of the format: yyyy-mm-dd. e.g. 
+
+    python3 pycryptobot.py --stats --statstartdate 2021-6-01
+
+To get the stats from all your bots, another optional flag of --statgroup can be used. This takes a list of markets and merges the results into one output. e.g.
+
+    python3 pycryptobot.py --stats --statgroup BTCGBP ETHGBP ADAGBP
+
+or via the config.json file e.g.
+
+    "config": {
+        ....
+        "stats": 1,
+        "statgroup": ["BTCGBP", "ETHGBP", "ADAGBP"],
+        ....
+    }
+Note: --statgroup only accepts a group of markets if the quote currency (in this example GBP) is the same.
+
+If you want more detail than the simple summary, add the optional flag --statdetail. This will print a more detailed list of the transactions.
+--statdetail can work in conjunction with --statstartdate and --statgroup.
 
 ## Upgrading the bots
 

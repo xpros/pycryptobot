@@ -6,13 +6,15 @@ import sched
 import sys
 import time
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 from models.PyCryptoBot import PyCryptoBot, truncate as _truncate
 from models.AppState import AppState
 from models.Trading import TechnicalAnalysis
 from models.TradingAccount import TradingAccount
+from models.Stats import Stats
 from models.helper.MarginHelper import calculate_margin
 from views.TradingGraphs import TradingGraphs
+from models.Strategy import Strategy
 from models.helper.LogHelper import Logger
 
 # minimal traceback
@@ -20,118 +22,14 @@ sys.tracebacklimit = 1
 
 app = PyCryptoBot()
 account = TradingAccount(app)
+Stats(app, account).show()
 technical_analysis = None
 state = AppState(app, account)
 state.initLastAction()
 
 s = sched.scheduler(time.time, time.sleep)
 
-def getAction(now: datetime = datetime.today().strftime('%Y-%m-%d %H:%M:%S'), app: PyCryptoBot = None, price: float = 0,
-              df: pd.DataFrame = pd.DataFrame(), df_last: pd.DataFrame = pd.DataFrame(), last_action: str = 'WAIT') -> str:
-    ema12gtema26co = bool(df_last['ema12gtema26co'].values[0])
-    macdgtsignal = bool(df_last['macdgtsignal'].values[0])
-    goldencross = bool(df_last['goldencross'].values[0])
-    obv_pc = float(df_last['obv_pc'].values[0])
-    elder_ray_buy = bool(df_last['eri_buy'].values[0])
-    ema12gtema26 = bool(df_last['ema12gtema26'].values[0])
-    macdgtsignalco = bool(df_last['macdgtsignalco'].values[0])
-    ema12ltema26co = bool(df_last['ema12ltema26co'].values[0])
-    macdltsignal = bool(df_last['macdltsignal'].values[0])
-
-    action = '' 
-
-    # criteria for a buy signal
-    if ema12gtema26co is True \
-            and (macdgtsignal is True or app.disableBuyMACD()) \
-            and (goldencross is True or app.disableBullOnly()) \
-            and (obv_pc > -5 or app.disableBuyOBV()) \
-            and (elder_ray_buy is True or app.disableBuyElderRay()) \
-            and last_action != 'BUY':
-
-        action = 'BUY'
-
-        Logger.debug('*** Buy Signal ***')
-        Logger.debug(f'ema12gtema26co: {ema12gtema26co}')
-
-        if not app.disableBuyMACD():
-            Logger.debug(f'macdgtsignal: {macdgtsignal}')
-
-        if not app.disableBullOnly():
-            Logger.debug(f'goldencross: {goldencross}')
-
-        if not app.disableBuyOBV():
-            Logger.debug(f'obv_pc: {obv_pc} > -5')
-
-        if not app.disableBuyElderRay():
-            Logger.debug(f'elder_ray_buy: {elder_ray_buy}')
-
-        Logger.debug(f'last_action: {last_action}')
-
-    elif ema12gtema26 is True \
-            and macdgtsignalco is True \
-            and (goldencross is True or app.disableBullOnly()) \
-            and (obv_pc > -5 or app.disableBuyOBV()) \
-            and (elder_ray_buy is True or app.disableBuyElderRay()) \
-            and last_action != 'BUY':
-
-        action = 'BUY'
-
-        Logger.debug('*** Buy Signal ***')
-        Logger.debug(f'ema12gtema26: {ema12gtema26}')
-        Logger.debug(f'macdgtsignalco: {macdgtsignalco}')
-
-        if not app.disableBullOnly():
-            Logger.debug(f'goldencross: {goldencross}')
-
-        if not app.disableBuyOBV():
-            Logger.debug(f'obv_pc: {obv_pc} > -5')
-
-        if not app.disableBuyElderRay():
-            Logger.debug(f'elder_ray_buy: {elder_ray_buy}')
-
-        Logger.debug(f'last_action: {last_action}')
-        
-
-    # criteria for a sell signal
-    elif ema12ltema26co is True \
-            and (macdltsignal is True or app.disableBuyMACD()) \
-            and last_action not in ['', 'SELL']:
-
-        action = 'SELL'
-
-        Logger.debug('*** Sell Signal ***')
-        Logger.debug(f'ema12ltema26co: {ema12ltema26co}')
-        Logger.debug(f'macdltsignal: {macdltsignal}')
-        Logger.debug(f'last_action: {last_action}')
-
-    # anything other than a buy or sell, just wait
-    else:
-        action = 'WAIT'
-
-    # if disabled, do not buy within 3% of the dataframe close high
-    if last_action == 'SELL' and app.disableBuyNearHigh() is True and (price > (df['close'].max() * 0.97)):
-        log_text = str(now) + ' | ' + app.getMarket() + ' | ' + \
-            app.printGranularity() + ' | Ignoring Buy Signal (price ' + str(price) + ' within 3% of high ' + str(
-            df['close'].max()) + ')'
-        Logger.warning(log_text)
-
-        action = 'WAIT'
-
-    return action
-
-
-def getInterval(df: pd.DataFrame = pd.DataFrame(), app: PyCryptoBot = None, iterations: int = 0) -> pd.DataFrame:
-    if len(df) == 0:
-        return df
-
-    if app.isSimulation() and iterations > 0:
-        # with a simulation iterate through data
-        return df.iloc[iterations - 1:iterations]
-    else:
-        # most recent entry
-        return df.tail(1)
-
-def executeJob(sc=None, app: PyCryptoBot = None, state: AppState = None, trading_data=pd.DataFrame()):
+def executeJob(sc=None, app: PyCryptoBot=None, state: AppState=None, trading_data=pd.DataFrame()):
     """Trading bot job which runs at a scheduled interval"""
 
     global technical_analysis
@@ -147,17 +45,45 @@ def executeJob(sc=None, app: PyCryptoBot = None, state: AppState = None, trading
 
     # increment state.iterations
     state.iterations = state.iterations + 1
-
+    
     if not app.isSimulation():
         # retrieve the app.getMarket() data
         trading_data = app.getHistoricalData(app.getMarket(), app.getGranularity())
+        
     else:
         if len(trading_data) == 0:
             return None
 
     # analyse the market data
-    if app.isSimulation() and len(trading_data.columns) > 8:
+    if app.isSimulation() and len(trading_data.columns) > 8:    
         df = trading_data
+        # if smartswitch then get the market data using new granularity
+        if app.sim_smartswitch:
+            df_last = app.getInterval(df, state.iterations - 1)
+            if len(df_last.index.format()) > 0:
+                if app.simstartdate is not None:
+                    startDate = app.simstartdate
+                else:
+                    startDate = str(df_last.index.format()[0])
+                    
+                if app.simenddate is not None:
+                    if app.simenddate == "now":
+                        endDate = str(datetime.now())
+                        dt = endDate.split(".")
+                        endDate = dt[0]
+                    else:
+                        endDate = app.simenddate
+                else:
+                    endDate = str(df.tail(1).index.format()[0])
+
+                startDate = f'{startDate} 00:00:00' if len(startDate) == 10 else startDate
+                endDate = f'{endDate} 00:00:00' if len(endDate) == 10 else endDate
+               
+                df = app.getSmartSwitchHistoricalDataChained(app.getMarket(), app.getGranularity(), datetime.strptime(startDate, "%Y-%m-%d %H:%M:%S").isoformat(), datetime.strptime(endDate, "%Y-%m-%d %H:%M:%S").isoformat(), str(df_last.index.format()[0]))
+                state.iterations = 2
+
+            app.sim_smartswitch = False
+
     else:
         trading_dataCopy = trading_data.copy()
         technical_analysis = TechnicalAnalysis(trading_dataCopy)
@@ -165,9 +91,9 @@ def executeJob(sc=None, app: PyCryptoBot = None, state: AppState = None, trading
         df = technical_analysis.getDataFrame()
 
     if app.isSimulation():
-        df_last = getInterval(df, app, state.iterations)
+        df_last = app.getInterval(df, state.iterations)
     else:
-        df_last = getInterval(df, app)
+        df_last = app.getInterval(df)
 
     if len(df_last.index.format()) > 0:
         current_df_index = str(df_last.index.format()[0])
@@ -176,18 +102,28 @@ def executeJob(sc=None, app: PyCryptoBot = None, state: AppState = None, trading
 
     formatted_current_df_index = f'{current_df_index} 00:00:00' if len(current_df_index) == 10 else current_df_index
 
-    if app.getSmartSwitch() == 1 and app.getGranularity() == 3600 and app.is1hEMA1226Bull() is True and app.is6hEMA1226Bull() is True:
-        Logger.info('*** smart switch from granularity 3600 (1 hour) to 900 (15 min) ***')
+    current_sim_date = formatted_current_df_index
 
+    # use actual sim mode date to check smartchswitch
+    if app.getSmartSwitch() == 1 and app.getGranularity() == 3600 and app.is1hEMA1226Bull(current_sim_date) is True and app.is6hEMA1226Bull(current_sim_date) is True:
+        Logger.info('*** smart switch from granularity 3600 (1 hour) to 900 (15 min) ***')
+        
+        if app.isSimulation():
+            app.sim_smartswitch = True
+        
         app.notifyTelegram(app.getMarket() + " smart switch from granularity 3600 (1 hour) to 900 (15 min)")
 
         app.setGranularity(900)
         list(map(s.cancel, s.queue))
         s.enter(5, 1, executeJob, (sc, app, state))
 
-    if app.getSmartSwitch() == 1 and app.getGranularity() == 900 and app.is1hEMA1226Bull() is False and app.is6hEMA1226Bull() is False:
+    # use actual sim mode date to check smartchswitch
+    if app.getSmartSwitch() == 1 and app.getGranularity() == 900 and app.is1hEMA1226Bull(current_sim_date) is False and app.is6hEMA1226Bull(current_sim_date) is False:
         Logger.info("*** smart switch from granularity 900 (15 min) to 3600 (1 hour) ***")
-
+        
+        if app.isSimulation():
+            app.sim_smartswitch = True
+        
         app.notifyTelegram(app.getMarket() + " smart switch from granularity 900 (15 min) to 3600 (1 hour)")
 
         app.setGranularity(3600)
@@ -210,6 +146,14 @@ def executeJob(sc=None, app: PyCryptoBot = None, state: AppState = None, trading
 
     if len(df_last) > 0:
         now = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
+
+        # last_action polling if live
+        if app.isLive():
+            last_action_current = state.last_action
+            state.pollLastAction()
+            if last_action_current != state.last_action:
+                Logger.info(f'last_action change detected from {last_action_current} to {state.last_action}')
+                app.notifyTelegram(f"{app.getMarket} last_action change detected from {last_action_current} to {state.last_action}")
 
         if not app.isSimulation():
             ticker = app.getTicker(app.getMarket())
@@ -238,9 +182,13 @@ def executeJob(sc=None, app: PyCryptoBot = None, state: AppState = None, trading
         elder_ray_buy = bool(df_last['eri_buy'].values[0])
         elder_ray_sell = bool(df_last['eri_sell'].values[0])
 
+        # if simulation, set goldencross based on actual sim date
+        if app.isSimulation():
+            goldencross = app.is1hSMA50200Bull(current_sim_date)
+
         # if simulation interations < 200 set goldencross to true
-        if app.isSimulation() and state.iterations < 200:
-            goldencross = True
+        #if app.isSimulation() and state.iterations < 200:
+        #    goldencross = True
 
         # candlestick detection
         hammer = bool(df_last['hammer'].values[0])
@@ -257,7 +205,8 @@ def executeJob(sc=None, app: PyCryptoBot = None, state: AppState = None, trading
         evening_doji_star = bool(df_last['evening_doji_star'].values[0])
         two_black_gapping = bool(df_last['two_black_gapping'].values[0])
 
-        state.action = getAction(now, app, price, df, df_last, state.last_action)
+        strategy = Strategy(app, state, df, state.iterations)
+        state.action = strategy.getAction()
 
         immediate_action = False
         margin, profit, sell_fee = 0, 0, 0
@@ -300,75 +249,17 @@ def executeJob(sc=None, app: PyCryptoBot = None, state: AppState = None, trading
                 sell_price=price,
                 sell_taker_fee=app.getTakerFee())
 
-            # loss failsafe sell at fibonacci band
-            if app.disableFailsafeFibonacciLow() is False and app.allowSellAtLoss() and app.sellLowerPcnt() is None and state.fib_low > 0 and state.fib_low >= float(
-                    price):
+            # handle immedate sell actions
+            if strategy.isSellTrigger(price, technical_analysis.getTradeExit(price), margin, change_pcnt_high, obv_pc, macdltsignal):
                 state.action = 'SELL'
                 state.last_action = 'BUY'
                 immediate_action = True
-                log_text = '! Loss Failsafe Triggered (Fibonacci Band: ' + str(state.fib_low) + ')'
-                Logger.warning(log_text)
-                app.notifyTelegram(app.getMarket() + ' (' + app.printGranularity() + ') ' + log_text)
 
-            # loss failsafe sell at trailing_stop_loss
-            if app.trailingStopLoss() != None and change_pcnt_high < app.trailingStopLoss() and (
-                    app.allowSellAtLoss() or margin > 0):
-                state.action = 'SELL'
-                state.last_action = 'BUY'
-                immediate_action = True
-                log_text = '! Trailing Stop Loss Triggered (< ' + str(app.trailingStopLoss()) + '%)'
-                Logger.warning(log_text)
-
-                app.notifyTelegram(app.getMarket() + ' (' + app.printGranularity() + ') ' + log_text)
-
-            # loss failsafe sell at sell_lower_pcnt
-            elif app.disableFailsafeLowerPcnt() is False and app.allowSellAtLoss() and app.sellLowerPcnt() != None and margin < app.sellLowerPcnt():
-                state.action = 'SELL'
-                state.last_action = 'BUY'
-                immediate_action = True
-                log_text = '! Loss Failsafe Triggered (< ' + str(app.sellLowerPcnt()) + '%)'
-                Logger.warning(log_text)
-
-                app.notifyTelegram(app.getMarket() + ' (' + app.printGranularity() + ') ' + log_text)
-
-            # profit bank at sell_upper_pcnt
-            if app.disableProfitbankUpperPcnt() is False and app.sellUpperPcnt() != None and margin > app.sellUpperPcnt():
-                state.action = 'SELL'
-                state.last_action = 'BUY'
-                immediate_action = True
-                log_text = '! Profit Bank Triggered (> ' + str(app.sellUpperPcnt()) + '%)'
-                Logger.warning(log_text)
-
-                app.notifyTelegram(app.getMarket() + ' (' + app.printGranularity() + ') ' + log_text)
-
-            # profit bank when strong reversal detected
-            if app.disableProfitbankReversal() is False and margin > 3 and obv_pc < 0 and macdltsignal is True:
-                state.action = 'SELL'
-                state.last_action = 'BUY'
-                immediate_action = True
-                log_text = '! Profit Bank Triggered (Strong Reversal Detected)'
-                Logger.warning(log_text)
-
-                app.notifyTelegram(app.getMarket() + ' (' + app.printGranularity() + ') ' + log_text)
-
-            # configuration specifies to not sell at a loss
-            if state.action == 'SELL' and not app.allowSellAtLoss() and margin <= 0:
+            # handle overriding wait actions (do not sell if sell at loss disabled!)
+            if strategy.isWaitTrigger(margin):
                 state.action = 'WAIT'
                 state.last_action = 'BUY'
                 immediate_action = False
-                log_text = '! Ignore Sell Signal (No Sell At Loss)'
-                Logger.warning(log_text)
-
-            # profit bank when strong reversal detected
-            if app.sellAtResistance() is True and margin >= 2 and price > 0 and price != technical_analysis.getTradeExit(price):
-                state.action = 'SELL'
-                state.last_action = 'BUY'
-                immediate_action = True
-                log_text = '! Profit Bank Triggered (Selling At Resistance)'
-                Logger.warning(log_text)
-
-                if not (not app.allowSellAtLoss() and margin <= 0):
-                    app.notifyTelegram(app.getMarket() + ' (' + app.printGranularity() + ') ' + log_text)
 
         bullbeartext = ''
         if app.disableBullOnly() is True or (df_last['sma50'].values[0] == df_last['sma200'].values[0]):
@@ -390,7 +281,9 @@ def executeJob(sc=None, app: PyCryptoBot = None, state: AppState = None, trading
             truncate = functools.partial(_truncate, n=precision)
 
             price_text = 'Close: ' + truncate(price)
-            ema_text = app.compare(df_last['ema12'].values[0], df_last['ema26'].values[0], 'EMA12/26', precision)
+            ema_text=''
+            if app.disableBuyEMA() is False:
+                ema_text = app.compare(df_last['ema12'].values[0], df_last['ema26'].values[0], 'EMA12/26', precision)
 
             macd_text = ''
             if app.disableBuyMACD() is False:
@@ -480,38 +373,37 @@ def executeJob(sc=None, app: PyCryptoBot = None, state: AppState = None, trading
 
                 app.notifyTelegram(app.getMarket() + ' (' + app.printGranularity() + ') ' + log_text)
 
-
-            # EMA12 prefix/suffix are aligned to 3 characters
-            ema_co_prefix = '   '
-            ema_co_suffix = '   '
-            if ema12gtema26co is True:
-                ema_co_prefix = '*^ '
-                ema_co_suffix = ' ^*'
-            elif ema12ltema26co is True:
-                ema_co_prefix = '*v '
-                ema_co_suffix = ' v*'
-            elif ema12gtema26 is True:
-                ema_co_prefix = ' ^ '
-                ema_co_suffix = ' ^ '
-            elif ema12ltema26 is True:
-                ema_co_prefix = ' v '
-                ema_co_suffix = ' v '
+            ema_co_prefix = ''
+            ema_co_suffix = ''
+            if app.disableBuyEMA() is False:
+                if ema12gtema26co is True:
+                    ema_co_prefix = '*^ '
+                    ema_co_suffix = ' ^*'
+                elif ema12ltema26co is True:
+                    ema_co_prefix = '*v '
+                    ema_co_suffix = ' v*'
+                elif ema12gtema26 is True:
+                    ema_co_prefix = '^ '
+                    ema_co_suffix = ' ^'
+                elif ema12ltema26 is True:
+                    ema_co_prefix = 'v '
+                    ema_co_suffix = ' v'
 
             macd_co_prefix = ''
             macd_co_suffix = ''
             if app.disableBuyMACD() is False:
                 if macdgtsignalco is True:
                     macd_co_prefix = '*^ '
-                    macd_co_suffix = ' ^* | '
+                    macd_co_suffix = ' ^*'
                 elif macdltsignalco is True:
                     macd_co_prefix = '*v '
-                    macd_co_suffix = ' v* | '
+                    macd_co_suffix = ' v*'
                 elif macdgtsignal is True:
                     macd_co_prefix = '^ '
-                    macd_co_suffix = ' ^ | '
+                    macd_co_suffix = ' ^'
                 elif macdltsignal is True:
                     macd_co_prefix = 'v '
-                    macd_co_suffix = ' v | '
+                    macd_co_suffix = ' v'
 
             obv_prefix = ''
             obv_suffix = ''
@@ -528,13 +420,13 @@ def executeJob(sc=None, app: PyCryptoBot = None, state: AppState = None, trading
                     output_text = formatted_current_df_index + ' | ' + app.getMarket() + bullbeartext + ' | ' + \
                                   app.printGranularity() + ' | ' + price_text + ' | ' + ema_co_prefix + \
                                   ema_text + ema_co_suffix + ' | ' + macd_co_prefix + macd_text + macd_co_suffix + \
-                                  obv_prefix + obv_text + obv_suffix + state.eri_text + state.action + \
+                                  obv_prefix + obv_text + obv_suffix + state.eri_text + ' | ' + state.action + \
                                   ' | Last Action: ' + state.last_action
                 else:
                     output_text = formatted_current_df_index + ' | ' + app.getMarket() + bullbeartext + ' | ' + \
-                                  app.printGranularity() + ' | ' + price_text + ' | ' + ema_co_prefix + ema_text + \
-                                  ema_co_suffix + ' | ' + macd_co_prefix + macd_text + macd_co_suffix + obv_prefix + \
-                                  obv_text + obv_suffix + state.eri_text + state.action + ' '
+                                  app.printGranularity() + ' | ' + price_text + ' | ' + ema_co_prefix + \
+                                  ema_text + ema_co_suffix + ' | ' + macd_co_prefix + macd_text + macd_co_suffix + \
+                                  obv_prefix + obv_text + obv_suffix + state.eri_text + ' | ' + state.action + ' '
 
                 if state.last_action == 'BUY':
                     if state.last_buy_size > 0:
@@ -777,8 +669,7 @@ def executeJob(sc=None, app: PyCryptoBot = None, state: AppState = None, trading
                     Logger.info(app.getQuoteCurrency() + ' balance before order: ' + str(account.getBalance(app.getQuoteCurrency())))
 
                     # execute a live market sell
-                    resp = app.marketSell(app.getMarket(), float(account.getBalance(app.getBaseCurrency())),
-                                          app.getSellPercent())
+                    resp = app.marketSell(app.getMarket(), float(account.getBalance(app.getBaseCurrency())), app.getSellPercent())
                     Logger.debug(resp)
 
                     # display balances
@@ -891,7 +782,7 @@ def executeJob(sc=None, app: PyCryptoBot = None, state: AppState = None, trading
                 account.saveTrackerCSV()
 
         if app.isSimulation():
-            if state.iterations < 300:
+            if state.iterations < len(df):
                 if app.simuluationSpeed() in ['fast', 'fast-sample']:
                     # fast processing
                     list(map(s.cancel, s.queue))
@@ -915,12 +806,16 @@ def main():
             message += 'Coinbase Pro bot'
         elif app.getExchange() == 'binance':
             message += 'Binance bot'
-
-        message += ' for ' + app.getMarket() + ' using granularity ' + app.printGranularity()
+        
+        smartSwitchStatus = 'enabled' if app.getSmartSwitch() else 'disabled'
+        message += ' for ' + app.getMarket() + ' using granularity ' + app.printGranularity() + '. Smartswitch ' + smartSwitchStatus
         app.notifyTelegram(message)
 
         # initialise and start application
         trading_data = app.startApp(account, state.last_action)
+
+        if app.getSmartSwitch():
+            app.sim_smartswitch = True
 
         def runApp():
             # run the first job immediately after starting
