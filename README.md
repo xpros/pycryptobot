@@ -1,48 +1,48 @@
 [![Docker](https://github.com/whittlem/pycryptobot/actions/workflows/container.yml/badge.svg)](https://github.com/whittlem/pycryptobot/actions/workflows/container.yml/badge.svg) [![Tests](https://github.com/whittlem/pycryptobot/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/whittlem/pycryptobot/actions/workflows/unit-tests.yml/badge.svg)
 
-# Python Crypto Bot v2.47.2 (pycryptobot)
+# Python Crypto Bot v3.6.0 (pycryptobot)
 
 ## Join our chat on Telegram
 
-https://t.me/joinchat/09hYKfelbRY2MDNk
+<https://t.me/joinchat/09hYKfelbRY2MDNk>
 
-##  Supporting The Project
+## Supporting The Project
 
 I get paid to write on Medium. Readers following me, applauding and commenting on my articles, all helps with my earnings. I provided this bot to all of you for free and actively developing it. One way you can support my efforts is to follow me on Medium and read my articles. The Medium subscription is $5 a month (roughly £3) so basically nothing in terms of the value you are getting from the bot. Your efforts here would be greatly appreciated!
 
 Follow me on Medium for updates!
 
-https://whittle.medium.com
+<https://whittle.medium.com>
 
 Python Crypto Bot (PyCryptoBot)
 
-https://medium.com/coinmonks/python-crypto-bot-pycryptobot-b54f4b3dbb75
+<https://medium.com/coinmonks/python-crypto-bot-pycryptobot-b54f4b3dbb75>
 
 What’s new in PyCryptoBot 2?
 
-https://medium.com/coinmonks/whats-new-in-pycryptobot-2-a4bbb1b0c90e
+<https://medium.com/coinmonks/whats-new-in-pycryptobot-2-a4bbb1b0c90e>
 
 PyCryptoBot with Telegram
 
-https://medium.com/coinmonks/pycryptobot-with-telegram-83eed5f230c2
+<https://medium.com/coinmonks/pycryptobot-with-telegram-83eed5f230c2>
 
 PyCryptoBot Results and Config
 
-https://medium.com/coinmonks/pycryptobot-results-and-config-57fb6625a6d9
+<https://medium.com/coinmonks/pycryptobot-results-and-config-57fb6625a6d9>
 
 Coinbase Pro Portfolio Tracker
 
-https://medium.com/coinmonks/coinbase-pro-portfolio-tracker-a6e4a1c6b8f8
+<https://medium.com/coinmonks/coinbase-pro-portfolio-tracker-a6e4a1c6b8f8>
 
 TradingView.com Charts ❤
 
-https://levelup.gitconnected.com/tradingview-com-charts-36a49c9f77ea
+<https://levelup.gitconnected.com/tradingview-com-charts-36a49c9f77ea>
 
 ## Optional Add-on
 
 Coinbase Pro Portfolio Tracker
 
-https://github.com/whittlem/coinbaseprotracker
+<https://github.com/whittlem/coinbaseprotracker>
 
 An all-in-one view of all your Coinbase Pro portfolios. Highly recommended
 if running multiple bots and keeping track of their progress.
@@ -51,13 +51,13 @@ if running multiple bots and keeping track of their progress.
 
 * When running in containers: a working docker/podman installation
 
-* Python 3.9.x installed -- https://installpython3.com  (must be Python 3.9 or greater)
+* Python 3.9.x installed -- <https://installpython3.com>  (must be Python 3.9 or greater)
 
     % python3 --version
 
     Python 3.9.1
 
-* Python 3 PIP installed -- https://pip.pypa.io/en/stable/installing
+* Python 3 PIP installed -- <https://pip.pypa.io/en/stable/installing>
 
     % python3 -m pip --version
 
@@ -93,18 +93,17 @@ Local repo
 
     % docker build -t pycryptobot .
 
-
 ## Additional Information
 
 The "requirements.txt" was created with `python3 -m pip freeze`
 
 ## Run it
 
-### Manual:
+### Manual
 
     % python3 pycryptobot.py <arguments>
 
-### Docker (Option 1):
+### Docker (Option 1)
 
     Example Local Absolute Path: /home/example/config.json
     Example Market: BTC-GBP
@@ -141,28 +140,26 @@ Typically I would save all my settings in the config.json but running from the c
 
     % python3 pycryptobot.py --market BTC-GBP --granularity 3600 --live 1 --verbose 0 --selllowerpcnt -2
 
-### docker-compose (Option 2):
+### docker-compose (Option 2)
 
 To run using the config.json in template folder,
 
     % docker-compose up -d
 
-
 By default, docker-compose will use the config inside `./market/template`. We provide this as a template for any market config.
 
 For each market you want to trade, create a copy of this folder under market
 For example, if you are trading `BTCEUR` and `ETHEUR` your market folder should look like this:
-```
-├── market
-│ ├── BTCEUR
-│ │ ├── config.json
-│ │ ├── pycryptobot.log
-│ │ └── graphs
-│ └── ETHEUR
-│   ├── config.json
-│   ├── pycryptobot.log
-│   └── graphs
-```
+
+    ├── market
+    │ ├── BTCEUR
+    │ │ ├── config.json
+    │ │ ├── pycryptobot.log
+    │ │ └── graphs
+    │ └── ETHEUR
+    │   ├── config.json
+    │   ├── pycryptobot.log
+    │   └── graphs
 
 modify docker-compose.yaml
 
@@ -203,6 +200,114 @@ Run all your bots. Note that each market should have it's own config. Graphs wil
 
     % docker-compose up -d
 
+### Kubernetes (Helm) (Option 3)
+
+There is a helm chart available in this repo. It will create your config.json as a configmap and the binance/coinbase keys as secrets, and mount them into the Pod.
+To run pycryptobot as a Kubernetes deployment, create your helm values as yaml in the following format (do not change the path to the api_key_file):
+
+    config: >
+        {
+            "coinbasepro": {
+                "api_url": "https://api.pro.coinbase.com",
+                "config": {
+                    "base_currency": "ETH",
+                    "quote_currency": "EUR",
+                    "live": 1,
+                    "sellatloss": 0,
+                    "disablelog": 1,
+                    "autorestart": 1
+                },
+                "api_key_file": "/app/keys/coinbasepro.key"
+            },
+            "telegram" : {
+                "token" : "<telegram_token>",
+                "client_id" : "<client_id>",
+            }
+        }
+
+    coinbasepro_key: |
+        XXXXXXXXXXXXXXXXXXXX
+        YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY
+        zzzzzzzzzzzz
+
+Or, for binance:
+
+    config: >
+        {
+            "binance": {
+                "api_url": "https://api.binance.com",
+                "config": {
+                    "base_currency": "ETH",
+                    "quote_currency": "EUR",
+                    "live": 1,
+                    "sellatloss": 0,
+                    "disablelog": 1,
+                    "autorestart": 1
+                },
+                "api_key_file": "/app/keys/binance.key"
+            },
+            "telegram" : {
+                "token" : "<telegram_token>",
+                "client_id" : "<client_id>",
+            }
+        }
+
+    binance_key: |
+        XXXXXXXXXXXXXXXXXXXX
+        YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY
+
+Or both:
+
+    config: >
+        {
+            "coinbasepro": {
+                "api_url": "https://api.pro.coinbase.com",
+                "config": {
+                    "base_currency": "ETH",
+                    "quote_currency": "EUR",
+                    "live": 1,
+                    "sellatloss": 0,
+                    "disablelog": 1,
+                    "autorestart": 1
+                },
+                "api_key_file": "/app/keys/coinbasepro.key"
+            },
+            "binance": {
+                "api_url": "https://api.binance.com",
+                "config": {
+                    "base_currency": "ETH",
+                    "quote_currency": "EUR",
+                    "live": 1,
+                    "sellatloss": 0,
+                    "disablelog": 1,
+                    "autorestart": 1
+                },
+                "api_key_file": "/app/keys/binance.key"
+            },
+            "telegram" : {
+                "token" : "<telegram_token>",
+                "client_id" : "<client_id>",
+            }
+        }
+
+    coinbasepro_key: |
+        XXXXXXXXXXXXXXXXXXXX
+        YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY
+        zzzzzzzzzzzz
+    binance_key: |
+        XXXXXXXXXXXXXXXXXXXX
+        YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY
+
+Then run:
+
+    git clone https://github.com/whittlem/pycryptobot
+    cd pycryptobot/chart
+    helm upgrade -i pycryptobot-eth-eur -f <path_to_helm_config>
+
+So if you created above helm values file as config-eth-eur.yaml, you would run:
+
+    helm upgrade -i pycryptobot-eth-eur -f config-eth-eur.yaml
+
 ## Bot mechanics
 
 Smart switching:
@@ -221,6 +326,10 @@ Buy signal:
 
 The bot will only trade in a bull market to minimise losses! (you can disable this)
 
+Special buy cases:
+
+* "buynearhighpcnt" to specify the percentage from high that the bot should not buy if "disablebuynearhigh" is not specified.
+
 Sell signal:
 
 * EMA12 is currently crossing below the EMA26
@@ -228,7 +337,9 @@ Sell signal:
 
 Special sell cases:
 
-* "buymaxsize" specify a fixed max amount of the quote currency to buy with
+* "buymaxsize" specifies a fixed max amount of the quote currency to buy with
+* "nosellminpcnt" specifies the lower margin limit to not sell above
+* "nosellmaxpcnt" specifies the upper margin limit to not sell below
 * If "sellatloss" is on, bot will sell if price drops below the lower Fibonacci band
 * If "sellatloss" is on and "selllowerpcnt" is specified the bot will sell at the specified amount E.g. -2 for -2% margin
 * If "sellatloss" is on and "trailingstoploss" is specified the bot will sell at the specified amount below the buy high
@@ -248,7 +359,7 @@ Special sell cases:
     --disablebullonly                   Disable only buying in bull market
     --disablebuynearhigh                Disable buying within 3% of the dataframe high
     --disablebuymacd                    Disable macd buy signal
-	--disablebuyema                     Disable ema buy signal.If both core indicators ema and macd buy signals are disabled, bot won't buy.Doesn't affect sell strategy.
+    --disablebuyema                     Disable ema buy signal.If both core indicators ema and macd buy signals are disabled, bot won't buy.Doesn't affect sell strategy.
     --disablebuyobv                     Disable obv buy signal
     --disablebuyelderray                Disable elder ray buy signal
     --disablefailsafefibonaccilow       Disable failsafe sell on fibonacci lower band
@@ -301,7 +412,7 @@ Coinbase Pro basic (using smart switching)
 
     {
         "api_url" : "https://api.pro.coinbase.com",
-        "api_key_file" : "coinbase.key"
+        "api_key_file" : "coinbase.key",
         "config" : {
             "cryptoMarket" : "BTC",
             "fiatMarket" : "GBP",
@@ -314,7 +425,7 @@ Coinbase Pro basic (specific granularity, no smart switching)
 
     {
         "api_url" : "https://api.pro.coinbase.com",
-        "api_key_file" : "coinbase.key"
+        "api_key_file" : "coinbase.key",
         "config" : {
             "cryptoMarket" : "BCH",
             "fiatMarket" : "GBP",
@@ -329,7 +440,7 @@ Coinbase Pro only (new format)
     {
         "coinbasepro" : {
             "api_url" : "https://api.pro.coinbase.com",
-            "api_key_file" : "coinbase.key"
+            "api_key_file" : "coinbase.key",
             "config" : {
                 "base_currency" : "BTC",
                 "quote_currency" : "GBP",
@@ -345,7 +456,7 @@ Binance only (new format)
     {
         "binance" : {
             "api_url" : "https://api.binance.com",
-            "api_key_file" : "binance.key"
+            "api_key_file" : "binance.key",
             "config" : {
                 "base_currency" : "BTC",
                 "quote_currency" : "ZAR",
@@ -361,7 +472,7 @@ Coinbase Pro and Binance (new format)
     {
         "binance" : {
             "api_url" : "https://api.binance.com",
-            "api_key_file" : "binance.key"
+            "api_key_file" : "binance.key",
             "config" : {
                 "base_currency" : "BTC",
                 "quote_currency" : "ZAR",
@@ -372,7 +483,7 @@ Coinbase Pro and Binance (new format)
         },
         "coinbasepro" : {
             "api_url" : "https://api.pro.coinbase.com",
-            "api_key_file" : "coinbase.key"
+            "api_key_file" : "coinbase.key",
             "config" : {
                 "base_currency" : "BTC",
                 "quote_currency" : "GBP",
@@ -415,7 +526,7 @@ If you want to disable logging entirely, you can set "filelog" and "consolelog" 
 If '--logfile' used when running bot "logfile": "pycryptobot.log" line in config file will be ignored.
 
 "fileloglevel" and "consoleloglevel" can get one of 'CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG', 'NOTSET'
-For further detail in log levels: https://docs.python.org/3/library/logging.html#logging-levels
+For further detail in log levels: <https://docs.python.org/3/library/logging.html#logging-levels>
 
 ## Multi-Market Trading
 
@@ -471,7 +582,7 @@ To keep track of the bots performance over time you can run the stats module. e.
 
 This will analyse all the completed buy/sell trade pairs to give stats on todays trades, the trades over the last 7 days, the trades over the last 30 days, and all-time trades.
 
-An optional flag of --statstartdate can be given to ignore all trades that happened before a specified date. The date must be of the format: yyyy-mm-dd. e.g. 
+An optional flag of --statstartdate can be given to ignore all trades that happened before a specified date. The date must be of the format: yyyy-mm-dd. e.g.
 
     python3 pycryptobot.py --stats --statstartdate 2021-6-01
 
