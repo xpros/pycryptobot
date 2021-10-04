@@ -8,12 +8,59 @@ Upgrade version:
 Upgrade library dependencies (if required):
 - python3 -m pip install -r requirements.txt -U
 
+## [4.0.4] - 2021-09-27
+
+-- Added Kucoin to --init (auto config)
+-- Added ability to parse --market in the same format as coinbase (ie ONT-USD)
+-- Added Websockets webhooks example script
+-- Added Coinbase Pro webhooks example script
+-- Telegram output tweaks
+-- Print currency trading on dryrun simulation summary
+
+## [4.0.3] - 2021-09-23
+
+-- fix for binance webhooks granularity
+
+## [4.0.2] - 2021-09-23
+
+-- fix for kucoin minimum order function raising an exception
+
+## [4.0.1] - 2021-09-22
+
+-- add option to disable insufficient funds exception and log as warning instead (--enableinsufficientfundslogging)
+
+## [4.0.0] - 2021-09-21
+
+### Added
+
+-- Kucoin exchange API (websockets not enabled)
+-- Websockets available for Binance and Coinbase Pro --websocket
+-- Added websvc.py to Docker
+
+### Changed
+
+-- Updated healthcheck to use a basic HTTPS request instead of a getTime() API call
+-- Disabled Seasonal ARIMA Model ML by default --enableml
+-- Removed healthcheck to reduce API calls for scaling
+
+## [3.6.1] - 2021-09-13
+
+### Added
+
+-- Websockets POC scripts for Coinbase Pro and Binance
+-- Seasonal ARIMA model predictions are not optional --enableml
+-- Updating Dockerfile to python:3.9-slim-bullseye
+-- switching to multistage venv Dockerfile and adding build-essentials in 1st stage to minimize Image size and build dependencies from source like numpy or statsmodels on arm64
+
 ## [3.6.0] - 2021-09-06
 
 ### Added
 
 -- fixed williams %r indicator and added it to the websvc dashboard
 -- added adx14 indicator and added it to the websvc dashboard
+-- fix for sim index "IndexError('index 0 is out of bounds for axis 0 with size 0')"
+-- fix for DF High not tracking the sim date in use, this stopped nobuynearhighpcnt working fully
+-- moved trades csv file to CSV folder
 
 ## [3.5.0] - 2021-09-05
 
@@ -45,7 +92,7 @@ Upgrade library dependencies (if required):
 
 ### Changed
 
--- added "buynearhighpcnt" to specify the percentage from high that the bot should not buy if "disablebuynearhigh" is not specified.
+-- added "nobuynearhighpcnt" to specify the percentage from high that the bot should not buy if "disablebuynearhigh" is not specified.
 -- added a catch and display of exception message for getTime()
 
 ## [3.2.15] - 2021-08-24
